@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://nx.dev" target="_blank" rel="noreferrer">
-    <img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="65" alt="Nx Logo" />
+    <img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="100" alt="Nx Logo" />
   </a>
   <a href="http://nestjs.com/" target="blank">
     <img src="https://nestjs.com/img/logo_text.svg" width="320" alt="NestJS Logo" />

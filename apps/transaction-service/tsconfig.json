@@ -11,6 +11,10 @@
     }
   ],
   "compilerOptions": {
-    "esModuleInterop": true
+    "composite": true,
+    "esModuleInterop": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true,
   }
 }

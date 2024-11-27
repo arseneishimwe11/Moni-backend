@@ -35,7 +35,29 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": ["apps/Moni-Backend-e2e/**/*"]
+      "exclude": [
+        "apps/Moni-Backend-e2e/**/*",
+        "gateway-e2e/**/*",
+        "apps/gateway-e2e/**/*",
+        "apps/auth-service-e2e/**/*",
+        "apps/user-service-e2e/**/*",
+        "apps/transaction-service-e2e/**/*",
+        "apps/notification-service-e2e/**/*",
+        "apps/auth-service-e2e/**/*",
+        "apps/transaction-service-e2e/**/*",
+        "apps/transaction-service-e2e/**/*",
+        "apps/notification-service-e2e/**/*",
+        "apps/api-gateway-e2e/**/*",
+        "apps/audit-service-e2e/**/*",
+        "apps/user-service-e2e/**/*"
+      ]
     }
-  ]
+  ],
+  "targetDefaults": {
+    "@nx/js:tsc": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    }
+  }
 }

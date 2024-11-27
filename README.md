@@ -1,82 +1,93 @@
-# MoniBackend
+# Moni Backend
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+<p align="center">
+  <a href="https://nx.dev" target="_blank" rel="noreferrer">
+    <img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="220" alt="Nx Logo" />
+  </a>
+  <a href="http://nestjs.com/" target="blank">
+    <img src="https://nestjs.com/img/logo_text.svg" width="320" alt="NestJS Logo" />
+  </a>
+</p>
 
 ✨ Your new, shiny [Nx workspace](https://nx.dev) is almost ready ✨.
 
 [Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/node?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
 
-## Finish your CI setup
+---
 
-[Click here to finish setting up your workspace!](https://cloud.nx.app/connect/7ODuNOmGZ3)
+## Technologies Used
 
+This project uses the following technologies:
 
-## Run tasks
+### 1. **NestJS**
+   - [NestJS](https://nestjs.com/) is a framework for building efficient, scalable Node.js server-side applications. It is heavily inspired by Angular, bringing an excellent structure and easy testing.
 
-To run the dev server for your app, use:
+### 2. **Nx**
+   - [Nx](https://nx.dev/) is a powerful set of extensible dev tools for monorepos. It provides advanced capabilities like code generation, dependency graph, and more. Nx helps in managing complex workflows with multiple applications and libraries.
+
+### 3. **Node.js**
+   - The backend is built on [Node.js](https://nodejs.org/), a JavaScript runtime built on Chrome's V8 JavaScript engine. It's used for building scalable network applications.
+
+### 4. **TypeScript**
+   - [TypeScript](https://www.typescriptlang.org/) is a statically typed superset of JavaScript. It adds type safety and powerful development features to the JavaScript ecosystem.
+
+### 5. **Docker (Optional)**
+   - [Docker](https://www.docker.com/) can be used for containerization of the backend application, allowing consistent environments and easier deployment.
+
+---
+
+## Run the Application
+
+To run the development server for your app, use the following command:
 
 ```sh
 npx nx serve Moni-Backend
 ```
 
-To create a production bundle:
+## Build the Production Bundle
+
+To create a production bundle, run:
 
 ```sh
 npx nx build Moni-Backend
 ```
 
-To see all available targets to run for a project, run:
+## View Available Targets
 
-```sh
+To see all available targets to run for a project, use:
+
+```bash
 npx nx show project Moni-Backend
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## Installation
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-Use the plugin's generator to create new projects.
-
-To generate a new application, use:
-
-```sh
-npx nx g @nx/node:app demo
+```bash
+$ npm install
 ```
 
-To generate a new library, use:
+## Running the app
 
-```sh
-npx nx g @nx/node:lib mylib
+```bash
+# development
+$ npm run start
+
+# watch mode
+$ npm run start:dev
+
+# production mode
+$ npm run start:prod
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+## Test
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```bash
+# unit tests
+$ npm run test
 
+# e2e tests
+$ npm run test:e2e
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/nx-api/node?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+# test coverage
+$ npm run test:cov
+```

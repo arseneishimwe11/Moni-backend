@@ -15,9 +15,11 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@modules/*": ["modules/*"],
       "@moni-backend/constants": ["libs/shared/constants/src/index.ts"],
       "@moni-backend/dto": ["libs/shared/dto/src/index.ts"],
       "@moni-backend/interfaces": ["libs/shared/interfaces/src/index.ts"],
+      "@moni-backend/redis": ["libs/redis/src/index.ts"],
       "@moni-backend/utils": ["libs/shared/utils/src/index.ts"]
     }
   },

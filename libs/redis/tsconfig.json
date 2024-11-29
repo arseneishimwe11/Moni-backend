@@ -1,17 +1,21 @@
 {
   "extends": "../../tsconfig.base.json",
-  "files": [],
-  "include": [],
-  "references": [
-    {
-      "path": "./tsconfig.spec.json"
-    }
-  ],
   "compilerOptions": {
+    "module": "commonjs",
     "composite": true,
     "esModuleInterop": true,
     "incremental": true,
     "declaration": true,
     "declarationMap": true,
-  }
+  },
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
+    }
+  ]
 }

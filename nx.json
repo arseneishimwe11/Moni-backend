@@ -33,7 +33,8 @@
     {
       "plugin": "@nx/jest/plugin",
       "options": {
-        "targetName": "test"
+        "targetName": "test",
+        "jestConfig": "jest.preset.js"
       },
       "exclude": [
         "apps/Moni-Backend-e2e/**/*",

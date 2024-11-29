@@ -3,18 +3,25 @@ import { TransactionController } from './transaction.controller';
 import { TransactionService } from './transaction.service';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
+import { BullModule } from '@nestjs/bull';
+import { PaymentProcessor } from './queue/payment.processor';
+import { RedisModule } from '@moni-backend/redis'
+import configs from 'config/config';
+
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      load: [configs],
     }),
-    HttpModule, // For interacting with the payment APIs.
+    HttpModule,
+    RedisModule,
+    BullModule.registerQueue({
+      name: 'payments',
+    }),
   ],
   controllers: [TransactionController],
-  providers: [TransactionService],
+  providers: [TransactionService, PaymentProcessor],
 })
-
-export class AppModule {}
-
+export class TransactionModule {}

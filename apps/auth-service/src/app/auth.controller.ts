@@ -71,7 +71,7 @@ export class AuthController {
     @Req() request: RequestWithUser,
     @Body() enable2FADto: Enable2FADto
   ) {
-    const { secret, qrCode } = await this.twoFactorService.generateSecret(
+    const { qrCode } = await this.twoFactorService.generateSecret(
       request.user.sub,
       request.user.email
     );
@@ -84,13 +84,12 @@ export class AuthController {
     if (!isValid) {
       throw new UnauthorizedException('Invalid 2FA code');
     }
-
     const backupCodes = await this.twoFactorService.generateBackupCodes(
       request.user.sub
     );
+
     return { qrCode, backupCodes };
   }
-
   @Post('2fa/verify')
   @UseGuards(AuthGuard)
   async verify2FA(

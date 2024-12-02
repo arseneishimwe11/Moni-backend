@@ -73,4 +73,20 @@ export class RedisService implements OnModuleInit {
   async releaseLock(key: string): Promise<void> {
     await this.redis.del(key);
   }
+
+  async getTTL(key: string): Promise<number> {
+    try {
+      const ttl = await this.redis.ttl(key);
+      if (ttl === -1) {
+        this.logger.warn(`Key ${key} exists but has no associated expire`);
+      } else if (ttl === -2) {
+        this.logger.warn(`Key ${key} does not exist`);
+      }
+      return ttl;
+    } catch (error) {
+      this.logger.error(`Failed to get TTL for key ${key}: ${error.message}`);
+      throw error;
+    }
+  }
 }
+

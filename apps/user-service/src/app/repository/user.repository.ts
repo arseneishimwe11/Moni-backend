@@ -68,7 +68,7 @@ export class UserRepository {
     return this.findById(id);
   }
 
-  async updateKycStatus(id: string, status: KycStatus, kycData?: Record<string, any>): Promise<User> {
+  async updateKycStatus(id: string, status: KycStatus, kycData?: Record<string, unknown>): Promise<User> {
     return this.update(id, { 
       kycStatus: status, 
       kycData,

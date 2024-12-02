@@ -5,15 +5,21 @@ import { Queue } from 'bull';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import * as speakeasy from 'speakeasy';
+import * as fs from 'fs';
+import * as path from 'path';
+import { createHash } from 'crypto';
 import { UserRepository } from './repository/user.repository';
 import { CreateUserDto, UpdateUserDto, KycSubmissionDto, ChangePasswordDto, UserResponseDto } from './dto/user.dto';
 import { User, UserStatus, KycStatus } from './entities/user.entity';
 import { RedisService } from '@moni-backend/redis';
 import { UserValidator } from './validators/user.validators';
+import { ConfigService } from '@nestjs/config';
+
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
+  private readonly configService: ConfigService;
   private readonly saltRounds = 12;
   private readonly maxLoginAttempts = 5;
   private readonly lockoutDuration = 30 * 60;
@@ -311,9 +317,37 @@ export class UserService {
   }
 
   private async uploadKycDocuments(files: Express.Multer.File[]): Promise<Record<string, string>> {
-    // Implementation for secure document upload
-    return {};
+    const documentUrls: Record<string, string> = {};
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    const maxFileSize = 5 * 1024 * 1024; // 5MB
+    const uploadDir = this.configService.get('UPLOAD_DIR') || 'uploads/kyc-documents';
+  
+    await fs.promises.mkdir(uploadDir, { recursive: true });
+  
+    for (const file of files) {
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        throw new BadRequestException(`Invalid file type: ${file.mimetype}`);
+      }
+  
+      if (file.size > maxFileSize) {
+        throw new BadRequestException('File size exceeds 5MB limit');
+      }
+  
+      const fileHash = createHash('sha256')
+        .update(file.buffer)
+        .digest('hex');
+  
+      const fileName = `${fileHash}-${file.originalname}`;
+      const filePath = path.join(uploadDir, fileName);
+  
+      await fs.promises.writeFile(filePath, file.buffer);
+  
+      documentUrls[file.fieldname] = `${this.configService.get('API_URL')}/kyc-documents/${fileName}`;
+    }
+  
+    return documentUrls;
   }
+1    
 
   private async invalidateUserSessions(userId: string): Promise<void> {
     await this.redisService.cacheSet(`${this.cachePrefix}${userId}:sessions`, Date.now(), 86400);

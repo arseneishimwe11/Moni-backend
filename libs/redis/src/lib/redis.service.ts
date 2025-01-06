@@ -17,7 +17,7 @@ export class RedisService implements OnModuleInit {
       password: this.configService.get('REDIS_PASSWORD'),
       db: this.configService.get('REDIS_DB', 0),
       retryStrategy: (times) => Math.min(times * 50, 2000),
-      maxRetriesPerRequest: 3
+      maxRetriesPerRequest: 3,
     });
 
     this.redis.on('connect', () => {
@@ -29,7 +29,11 @@ export class RedisService implements OnModuleInit {
     });
   }
 
-  async checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<boolean> {
+  async checkRateLimit(
+    key: string,
+    limit: number,
+    windowSeconds: number
+  ): Promise<boolean> {
     const attempts = await this.redis.incr(key);
     if (attempts === 1) {
       await this.redis.expire(key, windowSeconds);
@@ -37,7 +41,11 @@ export class RedisService implements OnModuleInit {
     return attempts <= limit;
   }
 
-  async cacheSet(key: string, value: unknown, ttl: number = this.defaultTTL): Promise<void> {
+  async cacheSet(
+    key: string,
+    value: unknown,
+    ttl: number = this.defaultTTL
+  ): Promise<void> {
     try {
       await this.redis.setex(key, ttl, JSON.stringify(value));
     } catch (error) {
@@ -60,7 +68,9 @@ export class RedisService implements OnModuleInit {
     try {
       await this.redis.del(key);
     } catch (error) {
-      this.logger.error(`Failed to delete cache for key ${key}: ${error.message}`);
+      this.logger.error(
+        `Failed to delete cache for key ${key}: ${error.message}`
+      );
       throw error;
     }
   }
@@ -88,5 +98,54 @@ export class RedisService implements OnModuleInit {
       throw error;
     }
   }
-}
 
+  async ping(): Promise<void> {
+    try {
+      const response = await this.redis.ping();
+      if (response !== 'PONG') {
+        throw new Error('Unexpected response from Redis');
+      }
+    } catch (error) {
+      this.logger.error(`Failed to ping Redis: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async scanPattern(pattern: string): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      const [newCursor, foundKeys] = await this.redis.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        100
+      );
+      cursor = newCursor;
+      keys.push(...foundKeys);
+    } while (cursor !== '0');
+
+    return keys;
+  }
+
+  async scanKeys(pattern: string): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      const [newCursor, scanKeys] = await this.redis.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        100
+      );
+      cursor = newCursor;
+      keys.push(...scanKeys);
+    } while (cursor !== '0');
+
+    return keys;
+  }
+}

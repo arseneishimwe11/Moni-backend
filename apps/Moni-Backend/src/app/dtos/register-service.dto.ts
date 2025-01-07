@@ -48,4 +48,7 @@ export class RegisterServiceDto {
   @IsNumber()
   @IsOptional()
   maxRetries?: number;
+  host: string;
+  port: number;
+  metadata: Record<string, unknown>;  capabilities: unknown[];
 }

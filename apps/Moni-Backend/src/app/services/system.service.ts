@@ -6,6 +6,7 @@ import { MetricsService } from '../modules/metrics/services/metrics.service';
 import { DiscoveryService } from '../modules/discovery/services/discovery.service';
 import { LoggingService } from '../modules/logging/services/logging.service';
 import { SystemStatus, SystemMetrics, SystemConfig, ServiceRegistration } from '../interfaces/system.interface';
+import { RegisterServiceDto } from '../dtos/register-service.dto';
 
 @Injectable()
 export class SystemService {
@@ -94,7 +95,49 @@ export class SystemService {
   //   });
   //   return registeredService;
   // }
-  async getSystemConfig(): Promise<SystemConfig> {
+
+  async registerService(serviceData: RegisterServiceDto): Promise<ServiceRegistration> {
+    const newService: ServiceRegistration = {
+      id: crypto.randomUUID(),
+      name: serviceData.name,
+      status: 'active',
+      instances: [{
+        id: crypto.randomUUID(),
+        host: serviceData.host,
+        port: serviceData.port,
+        status: 'active',
+        metadata: serviceData.metadata || {}
+      }],
+      lastHeartbeat: new Date(),
+      metadata: {
+        version: serviceData.version,
+        environment: this.configService.get('NODE_ENV') || '',
+        region: this.configService.get('REGION') || '',
+        capabilities: serviceData.capabilities || [],
+        healthCheckEndpoint: serviceData.healthCheckEndpoint || '/health'
+      }
+    };
+  
+    await this.redisService.cacheSet(
+      `services:${newService.id}`, 
+      newService,
+      this.configService.get<number>('SERVICE_REGISTRY_TTL') || 3600
+    );
+  
+    this.logger.log(`Service registered successfully: ${newService.name}`);
+    
+    await this.metricsService.recordMetric({
+      serviceName: newService.name,
+      metricName: 'service_registration',
+      value: 1,
+      labels: {
+        service: newService.name,
+        environment: newService.metadata.environment as string
+      }
+    });
+  
+    return newService;
+  }  async getSystemConfig(): Promise<SystemConfig> {
     return {
       environment: this.configService.get('NODE_ENV'),
       region: this.configService.get('REGION'),

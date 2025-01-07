@@ -20,7 +20,7 @@ export interface LogEntry {
       [serviceId: string]: ServiceMetrics;
     };
     summary: {
-      totalLogs: number;
+      totalLogs?: number;
       errorCount: number;
       warningCount: number;
       startTime: Date;

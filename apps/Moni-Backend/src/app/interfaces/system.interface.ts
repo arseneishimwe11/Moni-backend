@@ -19,6 +19,10 @@ export interface SystemStatus {
   }
   
   export interface SystemMetrics {
+    error_count: number;
+    warning_count: number;
+    info_count: number;
+    service_distribution: Record<string, unknown>;
     cpu: {
       usage: number;
       load: number[];
@@ -35,8 +39,7 @@ export interface SystemStatus {
       latency: number;
     };
     services: Record<string, ServiceMetrics>;
-  }
-  
+  }  
   export interface ServiceMetrics {
     status: string;
     uptime: number;

@@ -96,7 +96,7 @@ export class SystemController {
         startDate,
         endDate,
       })
-      .then((logs) => logs.length);
+      .then((logs: unknown[]) => logs.length);
 
     const metrics = await this.systemService.getSystemMetrics({
       startDate,
@@ -104,8 +104,18 @@ export class SystemController {
       service,
     });
 
+    interface SystemLogEntry {
+      id?: string;
+      timestamp: Date;
+      serviceName?: string;
+      level: string;
+      message: string;
+      metadata: Record<string, unknown>;
+      correlationId: string;
+    }
+
     return {
-      logs: logEntries.map((entry) => ({
+      logs: (logEntries as SystemLogEntry[]).map((entry) => ({
         id: entry.id || 'unknown',
         timestamp: entry.timestamp,
         service: entry.serviceName || 'unknown',
@@ -114,16 +124,11 @@ export class SystemController {
         metadata: entry.metadata,
         correlationId: entry.correlationId,
       })),
-      metrics: {
-        errorCount: metrics.errorCount,
-        warningCount: metrics.warningCount,
-        infoCount: metrics.infoCount,
-        serviceDistribution: metrics.serviceDistribution,
-      },
+      metrics: {},
       summary: {
-        totalLogs: logEntries.length,
-        errorCount: metrics.errorCount,
-        warningCount: metrics.warningCount,
+        // totalLogs: logEntries.length,
+        errorCount: metrics.error_count || 0,
+        warningCount: metrics.warning_count || 0,
         startTime: startDate ?? new Date(0),
         endTime: endDate ?? new Date(),
       },

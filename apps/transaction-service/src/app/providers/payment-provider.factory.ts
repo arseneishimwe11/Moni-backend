@@ -1,11 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IPaymentProvider } from './interfaces/payment-provider.interface';
+import { IPaymentProvider, PaymentResult } from './interfaces/payment-provider.interface';
 import { StripeProvider } from './implementations/stripe.provider';
 import { MomoProvider } from './implementations/momo.provider';
 import { PaymentProvider, PaymentRegion } from '../dto/payment.dto';
 import { PaymentProviderNotFoundException } from '../exceptions/payment-provider-not-found.exception';
 import { RedisService } from '@moni-backend/redis';
+import { PaymentProcessingException } from '../exceptions/payment-processing.exception';
 
 @Injectable()
 export class PaymentProviderFactory implements OnModuleInit {
@@ -71,4 +72,17 @@ export class PaymentProviderFactory implements OnModuleInit {
     
     return isAvailable;
   }
+
+  async verifyPayment(provider: PaymentProvider, verificationData: unknown): Promise<PaymentResult> {
+    const paymentProvider = this.getProvider(provider);
+    
+    try {
+      const verificationResult = await paymentProvider.verifyPayment(verificationData);
+      return verificationResult;
+    } catch (error) {
+      this.logger.error(`Payment verification failed for provider ${provider}: ${error.message}`);
+      throw new PaymentProcessingException(`Verification failed: ${error.message}`);
+    }
+  }
+    
 }

@@ -10,7 +10,9 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
   PROCESSING = 'processing',
   REQUIRES_ACTION = 'requires_action',
+  DISPUTED = 'disputed',
   UNKNOWN = 'unknown',
+  SUCCESSFUL = "SUCCESSFUL",
 }
 
 export enum PaymentProvider {

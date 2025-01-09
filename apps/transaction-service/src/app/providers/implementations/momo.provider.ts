@@ -2,15 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  IPaymentProvider,
-  PaymentResult,
-  RefundResult,
-} from '../interfaces/payment-provider.interface';
+import { IPaymentProvider, PaymentResult, RefundResult } from '../interfaces/payment-provider.interface';
 import { PaymentDto, PaymentStatus, RefundStatus } from '../../dto/payment.dto';
 import { PaymentProcessingException } from '../../exceptions/payment-processing.exception';
 import { createHmac } from 'crypto';
 import { RedisService } from '@moni-backend/redis';
+import { CreateDisputeDto, DisputeResult, DisputeStatus } from '../../dto/create-dispute.dto';
+
 @Injectable()
 export class MomoProvider implements IPaymentProvider {
   private readonly logger = new Logger(MomoProvider.name);
@@ -160,6 +158,46 @@ export class MomoProvider implements IPaymentProvider {
     }
   }
 
+  async verifyPayment(verificationData: {
+    referenceId: string;
+    [key: string]: unknown;
+  }): Promise<PaymentResult> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await axios.post(
+        `${this.baseUrl}/v1_0/payment/verify`,
+        verificationData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-Reference-Id': verificationData.referenceId,
+            'X-Target-Environment':
+              this.configService.get('NODE_ENV') === 'production'
+                ? 'production'
+                : 'sandbox',
+            'Ocp-Apim-Subscription-Key': this.subscriptionKey,
+          },
+        }
+      );
+
+      return {
+        providerReference: verificationData.referenceId,
+        status: this.mapMomoStatus(response.data.status),
+        amount: response.data.amount,
+        currency: response.data.currency,
+        metadata: {
+          verificationId: response.data.verificationId,
+          verifiedAt: new Date(),
+          provider: 'momo',
+        },
+        processingTime: Date.now(),
+      };
+    } catch (error) {
+      this.logger.error(`MoMo payment verification failed: ${error.message}`);
+      throw new PaymentProcessingException(this.handleMomoError(error));
+    }
+  }
+
   async refundPayment(
     transactionId: string,
     amount?: number
@@ -219,6 +257,7 @@ export class MomoProvider implements IPaymentProvider {
       throw new Error(`Failed to obtain MoMo access token: ${error.message}`);
     }
   }
+
   private mapMomoStatus(status: string): PaymentStatus {
     const statusMap: Record<string, PaymentStatus> = {
       SUCCESSFUL: PaymentStatus.SUCCEEDED,
@@ -254,6 +293,52 @@ export class MomoProvider implements IPaymentProvider {
 
     return 'Payment processing failed';
   }
+
+  async createDispute(transactionId: string, disputeData: CreateDisputeDto): Promise<DisputeResult> {
+    try {
+      const token = await this.getAccessToken();
+      const referenceId = uuidv4();
+  
+      const response = await axios.post(
+        `${this.baseUrl}/v1_0/disputes`,
+        {
+          transactionId,
+          referenceId,
+          reason: disputeData.reason,
+          description: disputeData.description,
+          evidence: disputeData.evidence
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-Reference-Id': referenceId,
+            'X-Target-Environment': this.configService.get('NODE_ENV') === 'production' ? 'production' : 'sandbox',
+            'Ocp-Apim-Subscription-Key': this.subscriptionKey,
+          },
+        }
+      );
+  
+      return {
+        id: referenceId,
+        status: DisputeStatus.OPEN,
+        reason: disputeData.reason,
+        evidence: disputeData.evidence,
+        amount: response.data.amount,
+        currency: response.data.currency,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          momoReferenceId: response.data.referenceId,
+          providerStatus: response.data.status
+        }
+      };
+    } catch (error) {
+      this.logger.error(`MoMo dispute creation failed: ${error.message}`);
+      throw new PaymentProcessingException(this.handleMomoError(error));
+    }
+  }
+
+  
   private calculateSignature(payload: {
     referenceId: string;
     amount: string;

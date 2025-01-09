@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { PaymentStatus, PaymentProvider, StripeCurrency, PaymentRegion } from '../dto/payment.dto';
+import { DisputeResult } from '../dto/create-dispute.dto';
 
 @Schema()
 export class Transaction extends Document {
@@ -60,6 +61,9 @@ export class Transaction extends Document {
 
   @Prop()
   processedAt?: Date;
+
+  @Prop({ type: Object })
+  disputeDetails?: DisputeResult;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);

@@ -1,3 +1,4 @@
+import { CreateDisputeDto } from "../../dto/create-dispute.dto";
 import { PaymentDto, PaymentStatus, RefundStatus } from "../../dto/payment.dto";
 
 export interface IPaymentProvider {
@@ -8,8 +9,10 @@ export interface IPaymentProvider {
     processPayment(paymentData: PaymentDto): Promise<PaymentResult>;
     validatePayment(paymentData: PaymentDto): Promise<boolean>;
     refundPayment(transactionId: string, amount?: number): Promise<RefundResult>;
+    createDispute(transactionId: string, disputeDto: CreateDisputeDto): unknown;
     getPaymentStatus(transactionId: string): Promise<PaymentStatus>;
     verifyWebhookSignature(payload: unknown, signature: string): Promise<boolean>;
+    verifyPayment(verificationData: unknown): Promise<PaymentResult>; 
   }  
   export interface PaymentResult {
     providerReference: string;

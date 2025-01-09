@@ -13,7 +13,7 @@ export class ActivityInterceptor implements NestInterceptor {
     private readonly redisService: RedisService
   ) {}
 
-  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
     const request = context.switchToHttp().getRequest();
     const { ip, method, url, user, headers } = request;
     const userAgent = headers['user-agent'];
@@ -53,5 +53,4 @@ export class ActivityInterceptor implements NestInterceptor {
         }
       })
     );
-  }
-}
+  }}

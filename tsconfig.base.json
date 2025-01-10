@@ -3,7 +3,9 @@
   "compilerOptions": {
     "rootDir": ".",
     "sourceMap": true,
-    "declaration": false,
+    "declaration": true,
+    // "declarationMap": true,
+    "composite": true,
     "moduleResolution": "node",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -21,7 +23,7 @@
       "@moni-backend/interfaces": ["libs/shared/interfaces/src/index.ts"],
       "@moni-backend/redis": ["libs/redis/src/index.ts"],
       "@moni-backend/shared-services": ["libs/shared/services/src/index.ts"],
-      "@moni-backend/utils": ["libs/shared/utils/src/index.ts"],
+      "@moni-backend/utils": ["libs/shared/utils/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -1,16 +1,18 @@
 import { Module } from '@nestjs/common';
 import { TransactionController } from './transaction.controller';
 import { TransactionService } from './transaction.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Transaction } from './entity/transaction.entity';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@moni-backend/redis';
-import configs from 'config/config';
 import { TransactionRepository } from './repositories/transaction.repository';
 import { PaymentProviderFactory } from './providers/payment-provider.factory';
 import { ExchangeRateProvider } from './providers/exchange-rate.provider';
 import { StripeProvider } from './providers/implementations/stripe.provider';
 import { MomoProvider } from './providers/implementations/momo.provider';
+import configs from 'config/config';
 
 @Module({
   imports: [
@@ -18,6 +20,7 @@ import { MomoProvider } from './providers/implementations/momo.provider';
       isGlobal: true,
       load: [configs],
     }),
+    TypeOrmModule.forFeature([Transaction]),
     HttpModule.registerAsync({
       imports: [ConfigModule],
       useFactory: () => ({
@@ -30,10 +33,7 @@ import { MomoProvider } from './providers/implementations/momo.provider';
       inject: [ConfigService],
     }),
     RedisModule,
-    BullModule.registerQueue(
-      { name: 'payments' },
-      { name: 'notifications' }
-    ),
+    BullModule.registerQueue({ name: 'payments' }, { name: 'notifications' }),
   ],
   controllers: [TransactionController],
   providers: [
@@ -45,4 +45,5 @@ import { MomoProvider } from './providers/implementations/momo.provider';
     MomoProvider,
   ],
   exports: [TransactionService],
-})export class TransactionModule {}
+})
+export class TransactionModule {}

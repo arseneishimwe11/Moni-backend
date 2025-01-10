@@ -1,5 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "incremental": true,
+    "declaration": true,
+    // "declarationMap": true,
+    "composite": true
+  },
   "files": [],
   "include": [],
   "references": [
@@ -9,12 +16,5 @@
     {
       "path": "./tsconfig.spec.json"
     }
-  ],
-  "compilerOptions": {
-    "composite": true,
-    "esModuleInterop": true,
-    "incremental": true,
-    "declaration": true,
-    "declarationMap": true,
-  }
+  ]
 }

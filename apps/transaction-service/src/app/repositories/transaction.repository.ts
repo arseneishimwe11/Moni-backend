@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Transaction } from '../schemas/transaction.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Between, Repository } from 'typeorm';
+import { Transaction } from '../entity/transaction.entity';
 import { PaymentStatus } from '../dto/payment.dto';
 import { RedisService } from '@moni-backend/redis';
 import { StatisticsQuery, TransactionStats } from '../interfaces/transaction-stats.interface';
@@ -12,39 +12,24 @@ export class TransactionRepository {
   private readonly CACHE_TTL = 3600;
 
   constructor(
-    @InjectModel(Transaction.name) private transactionModel: Model<Transaction>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepository: Repository<Transaction>,
     private readonly redisService: RedisService
   ) {}
 
   async createTransaction(data: Partial<Transaction>): Promise<Transaction> {
-    const transaction = new this.transactionModel({
-      ...data,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    const saved = await transaction.save();
+    const transaction = this.transactionRepository.create(data);
+    const saved = await this.transactionRepository.save(transaction);
     await this.cacheTransaction(saved);
     return saved;
   }
 
-  async updateTransaction(
-    id: string,
-    data: Partial<Transaction>
-  ): Promise<Transaction> {
-    const updated = await this.transactionModel.findByIdAndUpdate(
-      id,
-      {
-        ...data,
-        updatedAt: new Date(),
-      },
-      { new: true }
-    );
-
+  async updateTransaction( id: string, data: Partial<Transaction> ): Promise<Transaction> {
+    await this.transactionRepository.update(id, data);
+    const updated = await this.findById(id);
     if (updated) {
       await this.cacheTransaction(updated);
     }
-
     return updated;
   }
 
@@ -52,35 +37,34 @@ export class TransactionRepository {
     const cached = await this.redisService.cacheGet<Transaction>(
       `transaction:${id}`
     );
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
-    const transaction = await this.transactionModel.findById(id);
+    const transaction = await this.transactionRepository.findOne({
+      where: { id },
+    });
     if (transaction) {
       await this.cacheTransaction(transaction);
     }
-
     return transaction;
   }
 
   async findByStatus(status: PaymentStatus): Promise<Transaction[]> {
-    return this.transactionModel.find({ status }).sort({ createdAt: -1 });
+    return this.transactionRepository.find({ where: { status } });
   }
 
   async findByCustomerId(customerId: string): Promise<Transaction[]> {
-    return this.transactionModel.find({ customerId }).sort({ createdAt: -1 });
+    return this.transactionRepository.find({ where: { customerId } });
   }
 
   async findByDateRange(
     startDate: Date,
     endDate: Date
   ): Promise<Transaction[]> {
-    return this.transactionModel
-      .find({
-        createdAt: { $gte: startDate, $lte: endDate },
-      })
-      .sort({ createdAt: -1 });
+    return this.transactionRepository.find({
+      where: {
+        createdAt: Between(startDate, endDate),
+      },
+    });
   }
 
   private async cacheTransaction(transaction: Transaction): Promise<void> {
@@ -92,56 +76,79 @@ export class TransactionRepository {
   }
 
   async getStatistics(query: StatisticsQuery): Promise<TransactionStats> {
-    const matchStage: Record<string, unknown> = {};
+    const queryBuilder =
+      this.transactionRepository.createQueryBuilder('transaction');
 
     if (query.startDate) {
-      matchStage.createdAt = { $gte: query.startDate };
+      queryBuilder.andWhere('transaction.createdAt >= :startDate', {
+        startDate: query.startDate,
+      });
     }
     if (query.endDate) {
-      matchStage.createdAt = {
-        ...(matchStage.createdAt as Record<string, Date>),
-        $lte: query.endDate,
-      };
+      queryBuilder.andWhere('transaction.createdAt <= :endDate', {
+        endDate: query.endDate,
+      });
     }
     if (query.provider) {
-      matchStage.paymentMethod = query.provider;
+      queryBuilder.andWhere('transaction.paymentMethod = :provider', {
+        provider: query.provider,
+      });
     }
     if (query.status) {
-      matchStage.status = query.status;
+      queryBuilder.andWhere('transaction.status = :status', {
+        status: query.status,
+      });
     }
 
-    const [stats] = await this.transactionModel.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          volume: { $sum: '$amount' },
-          successful: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'SUCCEEDED'] }, 1, 0],
-            },
-          },
-          byProvider: {
-            $push: {
-              provider: '$paymentMethod',
-              amount: '$amount',
-            },
-          },
-          byStatus: {
-            $push: '$status',
-          },
-          byHour: {
-            $push: {
-              $hour: '$createdAt',
-            },
-          },
-        },
-      },
-    ]);
+    const [transactions, total] = await queryBuilder.getManyAndCount();
 
-    return this.formatStatistics(stats);
+    const stats = {
+      totalTransactions: total,
+      totalVolume: transactions.reduce((sum, t) => sum + Number(t.amount), 0),
+      successRate:
+        (transactions.filter((t) => t.status === PaymentStatus.SUCCEEDED)
+          .length /
+          total) *
+        100,
+      averageTransactionValue: total
+        ? transactions.reduce((sum, t) => sum + Number(t.amount), 0) / total
+        : 0,
+      byProvider: this.groupByProvider(transactions),
+      byStatus: this.groupByStatus(transactions),
+      hourlyDistribution: this.groupByHour(transactions),
+    };
+
+    return stats;
   }
+
+  private groupByProvider(
+    transactions: Transaction[]
+  ): Record<string, { count: number; volume: number }> {
+    return transactions.reduce((acc, curr) => {
+      if (!acc[curr.paymentMethod]) {
+        acc[curr.paymentMethod] = { count: 0, volume: 0 };
+      }
+      acc[curr.paymentMethod].count++;
+      acc[curr.paymentMethod].volume += Number(curr.amount);
+      return acc;
+    }, {});
+  }
+
+  private groupByStatus(transactions: Transaction[]): Record<string, number> {
+    return transactions.reduce((acc, curr) => {
+      acc[curr.status] = (acc[curr.status] || 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  private groupByHour(transactions: Transaction[]): Record<number, number> {
+    return transactions.reduce((acc, curr) => {
+      const hour = new Date(curr.createdAt).getHours();
+      acc[hour] = (acc[hour] || 0) + 1;
+      return acc;
+    }, {});
+  }
+
   private formatStatistics(rawStats: {
     byProvider: Array<{ provider: string; amount: number }>;
     byStatus: string[];

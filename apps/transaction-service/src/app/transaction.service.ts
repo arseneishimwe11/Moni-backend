@@ -3,8 +3,6 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PaymentDto, PaymentStatus, PaymentProvider } from './dto/payment.dto';
 import { ConfigService } from '@nestjs/config';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { TransactionRepository } from './repositories/transaction.repository';
 import { PaymentProviderFactory } from './providers/payment-provider.factory';
 import { PaymentProcessingException } from './exceptions/payment-processing.exception';
@@ -18,6 +16,7 @@ import { PaymentLimits, PaymentMethod } from './interfaces/payment-method.interf
 import { ExchangeRate } from './interfaces/exchange-rate.interface';
 import { ExchangeRateProviderInterface } from './interfaces/exchange-rate-provider.interface';
 import { ExchangeRateException } from './exceptions/exchange-rate.exception';
+import { RedisService } from '@moni-backend/redis';
 
 @Injectable()
 export class TransactionService {
@@ -29,7 +28,7 @@ export class TransactionService {
     @InjectQueue('notifications') private readonly notificationQueue: Queue,
     private transactionRepository: TransactionRepository,
     private paymentProviderFactory: PaymentProviderFactory,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly redisService: RedisService,
     @Inject('EXCHANGE_RATE_PROVIDER')
     private readonly exchangeRateProvider: ExchangeRateProviderInterface
   ) {}
@@ -79,6 +78,7 @@ export class TransactionService {
       throw new PaymentProcessingException(error.message);
     }
   }
+  
   async getPaymentStatus(transactionId: string) {
     const transaction = await this.transactionRepository.findById(
       transactionId
@@ -271,9 +271,7 @@ export class TransactionService {
     toCurrency: string
   ): Promise<ExchangeRate> {
     const cacheKey = `exchange_rate:${fromCurrency}:${toCurrency}`;
-    const cachedRate = (await this.cacheManager.get(cacheKey)) as
-      | ExchangeRate
-      | undefined;
+    const cachedRate = await this.redisService.cacheGet<ExchangeRate>(cacheKey);
 
     if (cachedRate) {
       return cachedRate;
@@ -283,7 +281,7 @@ export class TransactionService {
       fromCurrency,
       toCurrency
     );
-    await this.cacheManager.set(cacheKey, rate, 300000); // Cache for 5 minutes
+    await this.redisService.cacheSet(cacheKey, rate, 300); // Cache for 5 minutes
 
     return rate;
   }
@@ -295,7 +293,9 @@ export class TransactionService {
     const cacheKey = `exchange_rate:${fromCurrency}:${toCurrency}`;
 
     try {
-      const cachedRate = await this.cacheManager.get<ExchangeRate>(cacheKey);
+      const cachedRate = await this.redisService.cacheGet<ExchangeRate>(
+        cacheKey
+      );
       if (cachedRate) {
         return cachedRate;
       }
@@ -304,7 +304,7 @@ export class TransactionService {
         fromCurrency,
         toCurrency
       );
-      await this.cacheManager.set(cacheKey, rate, 300); // Cache for 5 minutes
+      await this.redisService.cacheSet(cacheKey, rate, 300); // Cache for 5 minutes
 
       return rate;
     } catch (error) {

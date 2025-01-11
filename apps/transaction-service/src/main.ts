@@ -6,7 +6,6 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import compression from 'compression';
 import helmet from 'helmet';
-import { RedisIoAdapter } from './app/adapters/redis.adapter';
 
 async function bootstrap() {
   const logger = new Logger('TransactionService');
@@ -21,11 +20,6 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
   });
-
-  // WebSocket adapter
-  const redisIoAdapter = new RedisIoAdapter(app);
-  await redisIoAdapter.connectToRedis();
-  app.useWebSocketAdapter(redisIoAdapter);
 
   // Global pipes and prefixes
   app.useGlobalPipes(

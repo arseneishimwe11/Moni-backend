@@ -1,63 +1,44 @@
-import { IoAdapter } from '@nestjs/platform-socket.io';
-import { Server, ServerOptions, Socket } from 'socket.io';
-import { createAdapter } from '@socket.io/redis-adapter';
-import { createClient } from 'redis';
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { INestApplication } from '@nestjs/common';
+import { RedisService } from '@moni-backend/redis';
 
-export class RedisIoAdapter extends IoAdapter {
-  private readonly logger = new Logger(RedisIoAdapter.name);
-  private adapterConstructor: ReturnType<typeof createAdapter>;
-  private readonly configService: ConfigService;
+@Injectable()
+export class RedisAdapter {
+  private readonly logger = new Logger(RedisAdapter.name);
+  private readonly prefix = 'transaction:';
+  private readonly defaultTTL = 3600; // 1 hour
 
-  constructor(app: INestApplication) {
-    super();
-    this.configService = app.get(ConfigService);
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly configService: ConfigService
+  ) {}
+
+  async cacheTransaction(key: string, data: unknown): Promise<void> {
+    const cacheKey = `${this.prefix}${key}`;
+    await this.redisService.cacheSet(cacheKey, data, this.defaultTTL);
+    this.logger.debug(`Cached transaction data: ${cacheKey}`);
+  }
+  async getCachedTransaction<T>(key: string): Promise<T | null> {
+    const cacheKey = `${this.prefix}${key}`;
+    return this.redisService.cacheGet<T>(cacheKey);
   }
 
-  async connectToRedis(): Promise<void> {
-    const pubClient = createClient({
-      url: this.configService.get('REDIS_URL'),
-      password: this.configService.get('REDIS_PASSWORD'),
-    });
-
-    const subClient = pubClient.duplicate();
-
-    await Promise.all([pubClient.connect(), subClient.connect()]);
-
-    this.adapterConstructor = createAdapter(pubClient, subClient);
-    this.logger.log('Redis adapter connected successfully');
+  async invalidateCache(key: string): Promise<void> {
+    const cacheKey = `${this.prefix}${key}`;
+    await this.redisService.cacheDelete(cacheKey);
+    this.logger.debug(`Invalidated cache: ${cacheKey}`);
   }
 
-  createIOServer(port: number, options?: ServerOptions): Server {
-    const server = super.createIOServer(port, options);
-    server.adapter(this.adapterConstructor);
-    return server;
+  async checkRateLimit(key: string, limit = 5, window = 300): Promise<boolean> {
+    const rateLimitKey = `${this.prefix}ratelimit:${key}`;
+    return this.redisService.checkRateLimit(rateLimitKey, limit, window);
   }
-
-  bindClientConnect(server: Server, callback: (socket: Socket) => void) {
-    server.on('connection', callback);
+  async setLock(key: string, ttl = 30): Promise<boolean> {
+    const lockKey = `${this.prefix}lock:${key}`;
+    return this.redisService.setLock(lockKey, ttl);
   }
-  bindMessageHandlers(
-    client: Socket,
-    handlers: { message: string; callback: (data: unknown) => void }[],
-    transform: (data: unknown) => unknown
-  ) {
-    const handlersMap = handlers.reduce<
-      Record<string, { callback: (data: unknown) => void }>
-    >((map, handler) => {
-      map[handler.message] = handler;
-      return map;
-    }, {});
-
-    client.on('message', (channel: string, data: unknown) => {
-      if (handlersMap[channel]) {
-        handlersMap[channel].callback(transform(data));
-      }
-    });
-  }
-  async close(server: Server): Promise<void> {
-    await server.close();
+  async releaseLock(key: string): Promise<void> {
+    const lockKey = `${this.prefix}lock:${key}`;
+    await this.redisService.releaseLock(lockKey);
   }
 }

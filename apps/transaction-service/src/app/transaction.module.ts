@@ -14,11 +14,26 @@ import { StripeProvider } from './providers/implementations/stripe.provider';
 import { MomoProvider } from './providers/implementations/momo.provider';
 import configs from 'config/config';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configs],
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        host: configService.get('DB_HOST'),
+        port: configService.get('DB_PORT'),
+        username: configService.get('DB_USERNAME'),
+        password: configService.get('DB_PASSWORD'),
+        database: configService.get('DB_NAME'),
+        entities: [Transaction],
+        synchronize: false,
+      }),
+      inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([Transaction]),
     HttpModule.registerAsync({
@@ -33,7 +48,10 @@ import configs from 'config/config';
       inject: [ConfigService],
     }),
     RedisModule,
-    BullModule.registerQueue({ name: 'payments' }, { name: 'notifications' }),
+    BullModule.registerQueue(
+      { name: 'payments' },
+      { name: 'notifications' }
+    ),    
   ],
   controllers: [TransactionController],
   providers: [
@@ -41,6 +59,10 @@ import configs from 'config/config';
     TransactionRepository,
     PaymentProviderFactory,
     ExchangeRateProvider,
+    {
+      provide: 'EXCHANGE_RATE_PROVIDER',
+      useClass: ExchangeRateProvider,
+    },
     StripeProvider,
     MomoProvider,
   ],

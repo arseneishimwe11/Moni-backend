@@ -3,18 +3,16 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
-    "types": ["node"],
-    "emitDecoratorMetadata": true,
-    "target": "es2021"
+    "types": ["node", "jest"],
+    "declaration": true,
+    "composite": true
+    // "declarationMap": true
   },
-  "include": ["src/**/*.ts", "src/index.ts", "../../config/**/*.ts", "../../libs/redis/src/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/**/*.ts",
+    "../../config/**/*.ts",
+    "../../libs/**/*.ts"
+  ],
   "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts"],
-  "references": [
-    {
-      "path": "./tsconfig.json"
-    },
-    {
-      "path": "../../libs/redis/tsconfig.json"
-    }
-  ]
 }

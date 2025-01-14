@@ -9,6 +9,7 @@ import { User } from './entities/user.entity';
 import { UserRepository } from './repository/user.repository';
 import { RedisModule } from '@moni-backend/redis';
 import { KycProcessor } from './processors/kyc.processor';
+import { UserValidator } from './validators/user.validators';
 import configs from 'config/config';
 
 @Module({
@@ -27,15 +28,24 @@ import configs from 'config/config';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_NAME'),
         entities: [User],
-        ssl: {
-          ca: configService.get('DB_CA_CERT'),
-        },
         synchronize: false,
-        logging: configService.get('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User]),
+    RedisModule,
+    BullModule.registerQueueAsync({
+      name: 'kyc-verification',
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        redis: {
+          host: configService.get('REDIS_HOST'),
+          port: configService.get('REDIS_PORT'),
+          password: configService.get('REDIS_PASSWORD'),
+        },
+      }),
+      inject: [ConfigService],
+    }),
     ClientsModule.registerAsync([
       {
         name: 'NOTIFICATION_SERVICE',
@@ -68,26 +78,9 @@ import configs from 'config/config';
         inject: [ConfigService],
       },
     ]),
-    RedisModule,
-    BullModule.registerQueueAsync({
-      name: 'kyc-verification',
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        redis: {
-          host: configService.get('REDIS_HOST'),
-          port: configService.get('REDIS_PORT'),
-          password: configService.get('REDIS_PASSWORD'),
-        },
-      }),
-      inject: [ConfigService],
-    }),
   ],
   controllers: [UserController],
-  providers: [
-    UserService,
-    UserRepository,
-    KycProcessor,
-  ],
-  exports: [UserService]
+  providers: [UserService, UserRepository, UserValidator, KycProcessor],
+  exports: [UserService],
 })
 export class UserModule {}

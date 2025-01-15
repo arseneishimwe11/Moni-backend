@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserStatus, KycStatus } from '../entities/user.entity';
@@ -67,6 +67,18 @@ export class UserRepository {
     await this.redisService.cacheDelete(`${this.CACHE_PREFIX}${id}`);
     return this.findById(id);
   }
+
+  async delete(id: string): Promise<void> {
+    const result = await this.userRepository.delete(id);
+    
+    if (result.affected === 0) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+  
+    await this.redisService.cacheDelete(`${this.CACHE_PREFIX}${id}`);
+    this.logger.log(`User ${id} deleted successfully`);
+  }
+  
 
   async updateKycStatus(id: string, status: KycStatus, kycData?: Record<string, unknown>): Promise<User> {
     return this.update(id, { 

@@ -14,7 +14,7 @@ import { User, UserStatus, KycStatus } from './entities/user.entity';
 import { RedisService } from '@moni-backend/redis';
 import { UserValidator } from './validators/user.validators';
 import { ConfigService } from '@nestjs/config';
-
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class UserService {
@@ -31,15 +31,17 @@ export class UserService {
     private readonly userRepository: UserRepository,
     private readonly redisService: RedisService,
     private readonly userValidator: UserValidator,
-    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
-    @Inject('AUDIT_SERVICE') private readonly auditClient: ClientProxy,
+    private readonly notificationClient: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE')
+    @Inject('AUDIT_SERVICE')
+    private readonly auditClient: ClientProxy,
     @InjectQueue('kyc-verification') private readonly kycQueue: Queue
   ) {}
 
   async getUserById(userId: string): Promise<UserResponseDto> {
     const cacheKey = `${this.cachePrefix}${userId}`;
     const cachedUser = await this.redisService.cacheGet<User>(cacheKey);
-    
+
     if (cachedUser) {
       return this.sanitizeUser(cachedUser);
     }
@@ -55,8 +57,11 @@ export class UserService {
 
   async createUser(createUserDto: CreateUserDto, ipAddress: string, userAgent: string): Promise<UserResponseDto> {
     await this.validateNewUser(createUserDto);
-    
-    const passwordHash = await bcrypt.hash(createUserDto.password, this.saltRounds);
+
+    const passwordHash = await bcrypt.hash(
+      createUserDto.password,
+      this.saltRounds
+    );
     const verificationToken = uuidv4();
     const userId = uuidv4();
 
@@ -69,74 +74,92 @@ export class UserService {
       verificationToken,
       lastIp: ipAddress,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     });
 
     await Promise.all([
-      this.notificationClient.emit('send_verification_email', {
-        userId: user.id,
-        email: user.email,
-        token: verificationToken,
-        firstName: user.firstName
-      }).toPromise(),
-
-      this.auditClient.emit('user_activity', {
-        userId: user.id,
-        action: 'USER_CREATED',
-        metadata: { ipAddress, userAgent, email: user.email }
-      }).toPromise()
+      firstValueFrom(
+        this.notificationClient.emit('send_verification_email', {
+          userId: user.id,
+          email: user.email,
+          token: user.verificationToken,
+        })
+      ),
+      firstValueFrom(
+        this.auditClient.emit('user_activity', {
+          userId: user.id,
+          action: 'USER_CREATED',
+          metadata: { ipAddress, userAgent },
+        })
+      ),
     ]);
 
     return this.sanitizeUser(user);
   }
 
   async updateUser(userId: string, updateUserDto: UpdateUserDto, ipAddress: string): Promise<UserResponseDto> {
-    const user = await this.getUserById(userId);
+    try {
+      const existingUser = await this.getUserById(userId);
+      if (!existingUser) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
 
-    if (updateUserDto.phoneNumber) {
-      await this.validatePhoneNumber(updateUserDto.phoneNumber, userId);
+      if (updateUserDto.phoneNumber) {
+        await this.validatePhoneNumber(updateUserDto.phoneNumber, userId);
+      }
+
+      const updatedUser = await this.userRepository.update(userId, {
+        ...updateUserDto,
+        lastIp: ipAddress,
+        updatedAt: new Date(),
+      });
+
+      await this.handlePostUpdateOperations(userId, updateUserDto, ipAddress);
+
+      return this.sanitizeUser(updatedUser);
+    } catch (error) {
+      this.logger.error(
+        `Failed to update user ${userId}: ${error.message}`,
+        error.stack
+      );
+
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new BadRequestException(`Failed to update user: ${error.message}`);
     }
-
-    const updatedUser = await this.userRepository.update(userId, {
-      ...updateUserDto,
-      lastIp: ipAddress,
-      updatedAt: new Date()
-    });
-
-    await Promise.all([
-      this.redisService.cacheDelete(`${this.cachePrefix}${userId}`),
-      this.auditClient.emit('user_activity', {
-        userId,
-        action: 'USER_UPDATED',
-        metadata: { ipAddress, changes: updateUserDto }
-      }).toPromise()
-    ]);
-
-    return this.sanitizeUser(updatedUser);
   }
 
   async deleteUser(userId: string, ipAddress: string): Promise<void> {
-    const user = await this.getUserById(userId);
-    
-    await Promise.all([
-      this.userRepository.update(userId, { 
-        status: UserStatus.INACTIVE,
-        updatedAt: new Date()
-      }),
-      this.redisService.cacheDelete(`${this.cachePrefix}${userId}`),
-      this.auditClient.emit('user_activity', {
+    try {
+      const existingUser = await this.getUserById(userId);
+      if (!existingUser) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+
+      await this.userRepository.delete(userId);
+      await this.handlePostDeletionOperations(
         userId,
-        action: 'USER_DELETED',
-        metadata: { ipAddress }
-      }).toPromise(),
-      this.notificationClient.emit('account_deleted', {
-        email: user.email,
-        firstName: user.firstName
-      }).toPromise()
-    ]);
+        existingUser.email,
+        ipAddress
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to delete user ${userId}: ${error.message}`,
+        error.stack
+      );
+
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new BadRequestException(`Failed to delete user: ${error.message}`);
+    }
   }
 
-  async submitKyc(userId: string, kycData: KycSubmissionDto, files: Express.Multer.File[]): Promise<void> {
+  async submitKyc(userId: string, kycData: KycSubmissionDto, files: Express.Multer.File[]
+  ): Promise<void> {
     const user = await this.getUserById(userId);
 
     if (!this.kycDocumentTypes.includes(kycData.documentType)) {
@@ -150,46 +173,62 @@ export class UserService {
       ...kycData,
       documents: documentUrls,
       submissionId: kycSubmissionId,
-      submittedAt: new Date()
+      submittedAt: new Date(),
     });
 
     await Promise.all([
-      this.kycQueue.add('process-kyc', {
-        userId,
-        kycData: {
-          ...kycData,
-          documents: documentUrls,
-          submissionId: kycSubmissionId
+      this.kycQueue.add(
+        'process-kyc',
+        {
+          userId,
+          kycData: {
+            ...kycData,
+            documents: documentUrls,
+            submissionId: kycSubmissionId,
+          },
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: true,
         }
-      }, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: true
-      }),
-
-      this.notificationClient.emit('kyc_submitted', {
-        userId,
-        email: user.email,
-        status: KycStatus.PENDING
-      }).toPromise()
+      ),
+      firstValueFrom(
+        this.notificationClient.emit('kyc_submitted', {
+          userId,
+          email: user.email,
+          status: KycStatus.PENDING,
+        })
+      ),
+      firstValueFrom(
+        this.auditClient.emit('user_activity', {
+          userId,
+          action: 'KYC_SUBMITTED',
+        })
+      ),
     ]);
   }
 
   async enableTwoFactor(userId: string): Promise<{ secret: string; qrCode: string }> {
     const user = await this.getUserById(userId);
-    
+
     const secret = speakeasy.generateSecret({
-      name: `MONI:${user.email}`
+      name: `MONI:${user.email}`,
     });
 
     await this.userRepository.update(userId, {
       twoFactorSecret: secret.base32,
-      isTwoFactorEnabled: false
+      isTwoFactorEnabled: false,
     });
+
+    await firstValueFrom(this.notificationClient.emit('two_factor_enabled', {
+      userId,
+      email: user.email,
+    }));
 
     return {
       secret: secret.base32,
-      qrCode: secret.otpauth_url
+      qrCode: secret.otpauth_url,
     };
   }
 
@@ -198,27 +237,26 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-  
+
     const isValid = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       encoding: 'base32',
-      token
+      token,
     });
-  
+
     if (isValid && !user.isTwoFactorEnabled) {
       await this.userRepository.update(userId, {
-        isTwoFactorEnabled: true
+        isTwoFactorEnabled: true,
       });
-  
-      await this.notificationClient.emit('two_factor_enabled', {
+
+      this.notificationClient.emit('two_factor_enabled', {
         userId,
-        email: user.email
-      }).toPromise();
+        email: user.email,
+      });
     }
-  
+
     return isValid;
   }
-  
 
   async disableTwoFactor(userId: string, token: string): Promise<void> {
     const isValid = await this.verifyTwoFactor(userId, token);
@@ -228,14 +266,16 @@ export class UserService {
 
     await this.userRepository.update(userId, {
       twoFactorSecret: null,
-      isTwoFactorEnabled: false
+      isTwoFactorEnabled: false,
     });
 
     const user = await this.getUserById(userId);
-    await this.notificationClient.emit('two_factor_disabled', {
-      userId,
-      email: user.email
-    }).toPromise();
+    await firstValueFrom(
+      this.notificationClient.emit('two_factor_disabled', {
+        userId,
+        email: user.email,
+      })
+    );
   }
 
   async verifyEmail(token: string): Promise<void> {
@@ -248,14 +288,16 @@ export class UserService {
       this.userRepository.update(user.id, {
         status: UserStatus.ACTIVE,
         verificationToken: null,
-        emailVerifiedAt: new Date()
+        emailVerifiedAt: new Date(),
       }),
       this.redisService.cacheDelete(`${this.cachePrefix}${user.id}`),
-      this.notificationClient.emit('welcome_email', {
-        userId: user.id,
-        email: user.email,
-        firstName: user.firstName
-      }).toPromise()
+      firstValueFrom(
+        this.notificationClient.emit('welcome_email', {
+          userId: user.id,
+          email: user.email,
+          firstName: user.firstName,
+        })
+      ),
     ]);
   }
 
@@ -264,36 +306,43 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-  
-    const isValidPassword = await bcrypt.compare(changePasswordDto.currentPassword, user.passwordHash);
+
+    const isValidPassword = await bcrypt.compare(
+      changePasswordDto.currentPassword,
+      user.passwordHash
+    );
     if (!isValidPassword) {
       throw new UnauthorizedException('Invalid current password');
     }
-  
+
     if (changePasswordDto.newPassword !== changePasswordDto.confirmPassword) {
       throw new BadRequestException('New passwords do not match');
     }
-  
-    const passwordHash = await bcrypt.hash(changePasswordDto.newPassword, this.saltRounds);
-    
+
+    const passwordHash = await bcrypt.hash(
+      changePasswordDto.newPassword,
+      this.saltRounds
+    );
+
     await Promise.all([
-      this.userRepository.update(userId, { 
+      this.userRepository.update(userId, {
         passwordHash,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       }),
       this.invalidateUserSessions(userId),
-      this.notificationClient.emit('password_changed', {
-        userId: user.id,
-        email: user.email
-      }).toPromise()
+      firstValueFrom(
+        this.notificationClient.emit('password_changed', {
+          userId: user.id,
+          email: user.email,
+        })
+      ),
     ]);
   }
-  
 
   private async validateNewUser(createUserDto: CreateUserDto): Promise<void> {
     const [existingEmail, existingPhone] = await Promise.all([
       this.userRepository.findByEmail(createUserDto.email),
-      this.userRepository.findByPhoneNumber(createUserDto.phoneNumber)
+      this.userRepository.findByPhoneNumber(createUserDto.phoneNumber),
     ]);
 
     if (existingEmail) {
@@ -310,55 +359,113 @@ export class UserService {
   }
 
   private async validatePhoneNumber(phoneNumber: string, userId: string): Promise<void> {
-    const existingUser = await this.userRepository.findByPhoneNumber(phoneNumber);
+    const existingUser = await this.userRepository.findByPhoneNumber(
+      phoneNumber
+    );
     if (existingUser && existingUser.id !== userId) {
       throw new ConflictException('Phone number already exists');
     }
   }
 
-  private async uploadKycDocuments(files: Express.Multer.File[]): Promise<Record<string, string>> {
+  private async uploadKycDocuments( files: Express.Multer.File[] ): Promise<Record<string, string>> {
     const documentUrls: Record<string, string> = {};
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'application/pdf'];
     const maxFileSize = 5 * 1024 * 1024; // 5MB
-    const uploadDir = this.configService.get('UPLOAD_DIR') || 'uploads/kyc-documents';
-  
+    const uploadDir =
+      this.configService.get('UPLOAD_DIR') || 'uploads/kyc-documents';
+
     await fs.promises.mkdir(uploadDir, { recursive: true });
-  
+
     for (const file of files) {
       if (!allowedMimeTypes.includes(file.mimetype)) {
         throw new BadRequestException(`Invalid file type: ${file.mimetype}`);
       }
-  
+
       if (file.size > maxFileSize) {
         throw new BadRequestException('File size exceeds 5MB limit');
       }
-  
-      const fileHash = createHash('sha256')
-        .update(file.buffer)
-        .digest('hex');
-  
+
+      const fileHash = createHash('sha256').update(file.buffer).digest('hex');
+
       const fileName = `${fileHash}-${file.originalname}`;
       const filePath = path.join(uploadDir, fileName);
-  
+
       await fs.promises.writeFile(filePath, file.buffer);
-  
-      documentUrls[file.fieldname] = `${this.configService.get('API_URL')}/kyc-documents/${fileName}`;
+
+      documentUrls[file.fieldname] = `${this.configService.get(
+        'API_URL'
+      )}/kyc-documents/${fileName}`;
     }
-  
+
     return documentUrls;
   }
-1    
+  1;
 
   private async invalidateUserSessions(userId: string): Promise<void> {
-    await this.redisService.cacheSet(`${this.cachePrefix}${userId}:sessions`, Date.now(), 86400);
+    await this.redisService.cacheSet(
+      `${this.cachePrefix}${userId}:sessions`,
+      Date.now(),
+      86400
+    );
   }
 
   private sanitizeUser(user: User): UserResponseDto {
-    const {...sanitizedUser } = user;
+    const { ...sanitizedUser } = user;
     return {
       ...sanitizedUser,
-      isTwoFactorEnabled: !!user.isTwoFactorEnabled
+      isTwoFactorEnabled: !!user.isTwoFactorEnabled,
     } as UserResponseDto;
   }
-  
+
+  private async handlePostUpdateOperations(
+    userId: string,
+    updateUserDto: UpdateUserDto,
+    ipAddress: string
+  ): Promise<void> {
+    try {
+      await Promise.all([
+        this.redisService.cacheDelete(`${this.cachePrefix}${userId}`),
+        this.auditClient.emit('user_activity', {
+          userId,
+          action: 'USER_UPDATED',
+          metadata: {
+            ipAddress,
+            changes: updateUserDto,
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        `Post-update operations failed for user ${userId}: ${error.message}`
+      );
+    }
+  }
+
+  private async handlePostDeletionOperations(
+    userId: string,
+    userEmail: string,
+    ipAddress: string
+  ): Promise<void> {
+    try {
+      await Promise.all([
+        this.redisService.cacheDelete(`${this.cachePrefix}${userId}`),
+        firstValueFrom(
+          this.auditClient.emit('user_activity', {
+            userId,
+            action: 'USER_DELETED',
+            metadata: {
+              ipAddress,
+              email: userEmail,
+              timestamp: new Date().toISOString(),
+            },
+          })
+        ),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        `Post-deletion operations failed for user ${userId}: ${error.message}`
+      );
+    }
+  }
 }

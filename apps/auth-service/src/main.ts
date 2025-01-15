@@ -17,13 +17,12 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
 
-  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS', 'http://localhost:3000'); // Frontend URL 
   app.enableCors({
-    origin: allowedOrigins.split(','),
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: configService.get('ALLOWED_ORIGINS').split(','),
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
   });
-
+  
   // Rate limiting
   app.use(
     rateLimit({

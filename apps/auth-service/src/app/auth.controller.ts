@@ -1,25 +1,10 @@
-import {
-  Controller,
-  Post,
-  Body,
-  UseGuards,
-  Headers,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Headers, Req, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { TwoFactorService } from './services/two-factor.service';
 import { BiometricService } from './services/biometric.service';
 import { AuthGuard } from './guards/auth.guard';
 import { RequestWithUser } from './interfaces/request-with-user.interface';
-import {
-  LoginDto,
-  BiometricLoginDto,
-  RefreshTokenDto,
-  Enable2FADto,
-  Verify2FADto,
-  BiometricChallengeDto,
-} from './dto/auth.dto';
+import { LoginDto, BiometricLoginDto, RefreshTokenDto, Enable2FADto, Verify2FADto, BiometricChallengeDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {

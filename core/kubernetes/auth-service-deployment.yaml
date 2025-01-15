@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: moni/auth-service:latest
+          ports:
+            - containerPort: 3002
+          envFrom:
+            - configMapRef:
+                name: moni-config
+            - secretRef:
+                name: moni-secrets
+          resources:
+            limits:
+              cpu: '800m'
+              memory: '800Mi'
+            requests:
+              cpu: '400m'
+              memory: '400Mi'

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: moni/api-gateway:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: moni-config
+            - secretRef:
+                name: moni-secrets
+          resources:
+            limits:
+              cpu: '1'
+              memory: '1Gi'
+            requests:
+              cpu: '500m'
+              memory: '512Mi'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000

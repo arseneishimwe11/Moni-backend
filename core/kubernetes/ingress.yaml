@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moni-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+spec:
+  rules:
+    - host: api.moni.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 80

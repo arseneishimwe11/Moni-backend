@@ -102,4 +102,5 @@ export class LoadBalancerService {
         `Failed to update metrics for instance ${instance.id}: ${error.message}`
       );
     }
-  }}
+  }
+}

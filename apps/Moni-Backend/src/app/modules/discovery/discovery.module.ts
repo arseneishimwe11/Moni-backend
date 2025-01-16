@@ -4,10 +4,7 @@ import { HttpModule } from '@nestjs/axios';
 import { ServiceDiscoveryService } from './services/service-discovery.service';
 
 @Module({
-  imports: [
-    RedisModule,
-    HttpModule,
-  ],
+  imports: [RedisModule, HttpModule],
   providers: [ServiceDiscoveryService],
   exports: [ServiceDiscoveryService],
 })

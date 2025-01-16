@@ -1,12 +1,29 @@
 import { Module } from '@nestjs/common';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { LoggingService } from './services/logging.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { RedisModule } from '@moni-backend/redis';
 
 @Module({
   imports: [
     ConfigModule,
-    RedisModule
+    RedisModule,
+    ClientsModule.registerAsync([
+      {
+        name: 'AUDIT_SERVICE',
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL')],
+            queue: 'audit_queue',
+            queueOptions: {
+              durable: true,
+            },
+          },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
   ],
   providers: [
     LoggingService,
@@ -17,10 +34,10 @@ import { RedisModule } from '@moni-backend/redis';
         logLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
         enableConsole: true,
         enableFile: true,
-        logPath: 'logs/system'
-      }
-    }
+        logPath: 'logs/system',
+      },
+    },
   ],
-  exports: [LoggingService]
+  exports: [LoggingService],
 })
 export class LoggingModule {}

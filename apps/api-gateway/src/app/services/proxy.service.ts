@@ -2,7 +2,7 @@ import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import { ProxyRequest, ProxyResponse } from '../interfaces/proxy-request.interface';
+import { ProxyRequest, ProxyResponse, CircuitBreakerConfig } from '../interfaces/proxy-request.interface';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { RedisService } from '@moni-backend/redis';
 
@@ -11,7 +11,11 @@ export class ProxyService {
   private readonly logger = new Logger(ProxyService.name);
   private readonly circuitBreakers: Map<string, CircuitBreaker> = new Map();
   private readonly CACHE_TTL = 3600;
-
+  private readonly defaultConfig: Omit<CircuitBreakerConfig, 'serviceName'> = {
+    failureThreshold: 5,
+    resetTimeout: 30000,
+    maxRetries: 3,
+  };
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
@@ -71,20 +75,27 @@ export class ProxyService {
       return this.handleProxyError(error, serviceUrl);
     }
   }
-  private initializeCircuitBreakers(): void {
-    const services = this.configService.get('services');
-    Object.entries(services).forEach(
-      ([, config]: [string, { url: string }]) => {
-        this.circuitBreakers.set(
-          config.url,
-          new CircuitBreaker(this.redisService, {
-            failureThreshold: 5,
-            resetTimeout: 60000,
-            halfOpenTimeout: 30000,
-          })
-        );
-      }
-    );
+
+  private initializeCircuitBreakers() {
+    const services = {
+      AUTH_SERVICE: this.defaultConfig,
+      USER_SERVICE: this.defaultConfig,
+      TRANSACTION_SERVICE: this.defaultConfig,
+      NOTIFICATION_SERVICE: this.defaultConfig,
+      AUDIT_SERVICE: this.defaultConfig,
+    };
+
+    Object.entries(services).forEach(([serviceName, config]) => {
+      const circuitBreakerConfig: CircuitBreakerConfig = {
+        ...config,
+        serviceName,
+      };
+
+      this.circuitBreakers.set(
+        serviceName,
+        new CircuitBreaker(this.redisService, circuitBreakerConfig)
+      );
+    });
   }
 
   private getCircuitBreaker(serviceUrl: string): CircuitBreaker {

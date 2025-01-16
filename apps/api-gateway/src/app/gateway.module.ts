@@ -7,6 +7,7 @@ import { RedisModule } from '@moni-backend/redis';
 import { RateLimiterGuard } from './guards/rate-limiter.guard';
 import { ProxyService } from './services/proxy.service';
 import configs from 'config/config';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
@@ -51,8 +52,34 @@ import configs from 'config/config';
         }),
         inject: [ConfigService],
       },
+      {
+        name: 'NOTIFICATION_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL')],
+            queue: 'notification_queue',
+          },
+        }),
+        inject: [ConfigService],
+      },
+      {
+        name: 'AUDIT_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL')],
+            queue: 'audit_queue',
+            queueOptions: { durable: true },
+          },
+        }),
+        inject: [ConfigService],
+      },
     ]),
     RedisModule,
+    HttpModule,
   ],
   controllers: [GatewayController],
   providers: [GatewayService, ProxyService, RateLimiterGuard],

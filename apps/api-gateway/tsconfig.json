@@ -15,6 +15,6 @@
     "composite": true,
     "incremental": true,
     "declaration": true,
-    "declarationMap": true,
+    // "declarationMap": true,
   }
 }

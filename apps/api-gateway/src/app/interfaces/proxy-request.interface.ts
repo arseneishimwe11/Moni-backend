@@ -41,3 +41,10 @@ export interface ProxyMetrics {
     timestamp: Date;
   };
 }
+
+export interface CircuitBreakerConfig {
+  failureThreshold: number;
+  resetTimeout: number;
+  maxRetries: number;
+  serviceName: string;
+}

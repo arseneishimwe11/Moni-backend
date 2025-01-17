@@ -11,7 +11,17 @@ export class LoggingService {
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
     @Inject('AUDIT_SERVICE') private readonly auditClient: ClientProxy
-  ) {}
+  ) {
+    this.logger = new Logger(LoggingService.name);
+  }
+
+  log(message: string, context?: string) {
+    this.logger.log(message, { context });
+  }
+
+  error(message: string, trace?: string, context?: string) {
+    this.logger.error(message, { trace, context });
+  }
 
   async logSystemEvent(event: {
     type: string;
@@ -86,11 +96,7 @@ export class LoggingService {
     return this.paginateResults(logs, page, pageSize);
   }
 
-  private paginateResults(
-    logs: LogEntry[],
-    page: number,
-    pageSize: number
-  ): LogEntry[] {
+  private paginateResults(logs: LogEntry[], page: number,pageSize: number): LogEntry[] {
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
     return logs.slice(startIndex, endIndex);

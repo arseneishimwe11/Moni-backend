@@ -8,6 +8,7 @@ import { RedisService } from '@moni-backend/redis';
 import { Notification, NotificationType, NotificationStatus } from './entities/notification.entity';
 import { NotificationTemplate } from './entities/notification-template.entity';
 import { CreateNotificationDto, SendNotificationDto, SendEmailDto, SendSmsDto } from './dto/notification.dto';
+import { MessagePattern } from '@nestjs/microservices';
 
 @Injectable()
 export class NotificationService {
@@ -229,4 +230,16 @@ export class NotificationService {
     }, {});
   }
   
+  @MessagePattern('payments.completed')
+  async handlePaymentCompletion(data: Record<string, unknown>) {
+    await this.createNotification({
+      type: NotificationType.PUSH,
+      userId: data.userId as string,
+      content: {
+        transactionId: data.transactionId as string,
+        amount: data.amount as number,
+        currency: data.currency as string
+      }
+    });
+  }
 }

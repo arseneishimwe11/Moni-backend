@@ -77,7 +77,24 @@ import { HttpModule } from '@nestjs/axios';
         }),
         inject: [ConfigService],
       },
+      {
+        name: 'KAFKA_CLIENT',
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.KAFKA,
+          options: {
+            client: {
+              clientId: 'moni-gateway',
+              brokers: configService.get<string>('KAFKA_BROKERS').split(','),
+            },
+            consumer: {
+              groupId: 'gateway-group'
+            }
+          }
+        }),
+        inject: [ConfigService],
+      }
     ]),
+
     RedisModule,
     HttpModule,
   ],

@@ -5,6 +5,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { AuditLog } from './entities/audit-log.entity';
 import { RedisService } from '@moni-backend/redis';
+import { MessagePattern } from '@nestjs/microservices';
 
 @Injectable()
 export class AuditService {
@@ -82,4 +83,25 @@ export class AuditService {
 
     return query.orderBy('audit_log.createdAt', 'DESC').getMany();
   }
+
+  async getAuditLogCountByResourceType(resourceType: string) {
+    return this.auditLogRepository.count({ where: { resourceType } });
+  }
+  async getAuditLogCountByAction(action: string) {
+    return this.auditLogRepository.count({ where: { action } });
+  }
+  async getAuditLogCountByResourceId(resourceId: string) {
+    return this.auditLogRepository.count({ where: { resourceId } });
+  }
+
+  @MessagePattern('transactions.*')
+  async logTransactionEvent(data: Record<string, unknown>) {
+    await this.logActivity(data.userId as string, data.action as string, {
+      transactionId: data.transactionId as string,
+      amount: data.amount as number,
+      status: data.status as string,
+      timestamp: new Date()
+    });
+  }
+
 }

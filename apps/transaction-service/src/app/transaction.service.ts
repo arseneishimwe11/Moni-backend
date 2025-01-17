@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
+import { ClientKafka, MessagePattern } from '@nestjs/microservices';
 import { Queue } from 'bull';
 import { PaymentDto, PaymentStatus, PaymentProvider } from './dto/payment.dto';
 import { ConfigService } from '@nestjs/config';
@@ -30,6 +31,7 @@ export class TransactionService {
     private paymentProviderFactory: PaymentProviderFactory,
     private readonly redisService: RedisService,
     @Inject('EXCHANGE_RATE_PROVIDER')
+    @Inject('KAFKA_CLIENT') private readonly kafkaClient: ClientKafka,
     private readonly exchangeRateProvider: ExchangeRateProviderInterface
   ) {}
 
@@ -65,7 +67,15 @@ export class TransactionService {
         }
       );
 
+      this.kafkaClient.emit('payments.initiated', {
+        transactionId: transaction.id,
+        amount: paymentDto.amount,
+        currency: paymentDto.currency,
+        timestamp: new Date()
+      });
+
       return { transactionId: transaction.id, status: PaymentStatus.PENDING };
+      
     } catch (error) {
       this.logger.error(
         `Payment creation failed: ${error.message}`,
@@ -79,6 +89,13 @@ export class TransactionService {
     }
   }
   
+  @MessagePattern('payments.processed')
+  async handlePaymentProcessed(data: Record<string, unknown>) {
+    await this.transactionRepository.updateTransaction(data.transactionId as string, {
+      status: data.status as PaymentStatus,
+      processedAt: new Date()
+    });
+  }
   async getPaymentStatus(transactionId: string) {
     const transaction = await this.transactionRepository.findById(
       transactionId

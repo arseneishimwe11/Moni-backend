@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
-import { ClientKafka, MessagePattern } from '@nestjs/microservices';
+import { MessagePattern } from '@nestjs/microservices';
 import { Queue } from 'bull';
 import { PaymentDto, PaymentStatus, PaymentProvider } from './dto/payment.dto';
 import { ConfigService } from '@nestjs/config';
@@ -31,8 +31,7 @@ export class TransactionService {
     private paymentProviderFactory: PaymentProviderFactory,
     private readonly redisService: RedisService,
     @Inject('EXCHANGE_RATE_PROVIDER')
-    @Inject('KAFKA_CLIENT') private readonly kafkaClient: ClientKafka,
-    private readonly exchangeRateProvider: ExchangeRateProviderInterface
+    private readonly exchangeRateProvider: ExchangeRateProviderInterface,
   ) {}
 
   async createPayment(paymentDto: PaymentDto) {
@@ -67,11 +66,15 @@ export class TransactionService {
         }
       );
 
-      this.kafkaClient.emit('payments.initiated', {
+      await this.notificationQueue.add('payment-notification', {
         transactionId: transaction.id,
         amount: paymentDto.amount,
         currency: paymentDto.currency,
         timestamp: new Date()
+      }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true
       });
 
       return { transactionId: transaction.id, status: PaymentStatus.PENDING };

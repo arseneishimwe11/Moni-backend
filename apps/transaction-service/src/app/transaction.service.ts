@@ -31,7 +31,7 @@ export class TransactionService {
     private paymentProviderFactory: PaymentProviderFactory,
     private readonly redisService: RedisService,
     @Inject('EXCHANGE_RATE_PROVIDER')
-    private readonly exchangeRateProvider: ExchangeRateProviderInterface,
+    private readonly exchangeRateProvider: ExchangeRateProviderInterface
   ) {}
 
   async createPayment(paymentDto: PaymentDto) {
@@ -46,18 +46,22 @@ export class TransactionService {
     });
 
     try {
-      const provider = this.paymentProviderFactory.getProvider(
-        paymentDto.region === 'AO' || paymentDto.region === 'CG'
-          ? PaymentProvider.MOMO
-          : PaymentProvider.STRIPE
-      );
+      const provider = this.paymentProviderFactory.getProvider(paymentDto.paymentMethod);
+
+      const paymentResult = await provider.processPayment(paymentDto);
+
+      const providerData = {
+        name: provider.name,
+        supportedRegions: provider.supportedRegions,
+        supportedCurrencies: provider.supportedCurrencies,
+      };
 
       await this.paymentQueue.add(
         'process-payment',
         {
           transactionId: transaction.id,
           paymentData: paymentDto,
-          provider: provider,
+          provider: providerData,
         },
         {
           attempts: 3,
@@ -66,19 +70,35 @@ export class TransactionService {
         }
       );
 
-      await this.notificationQueue.add('payment-notification', {
-        transactionId: transaction.id,
-        amount: paymentDto.amount,
-        currency: paymentDto.currency,
-        timestamp: new Date()
-      }, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: true
+      await this.notificationQueue.add(
+        'payment-notification',
+        {
+          transactionId: transaction.id,
+          amount: paymentDto.amount,
+          currency: paymentDto.currency,
+          timestamp: new Date(),
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: true,
+        }
+      );
+
+      await this.transactionRepository.updateTransaction(transaction.id, {
+        providerReference: paymentResult.providerReference,
+        status: paymentResult.status,
+        metadata: paymentResult.metadata,
       });
 
-      return { transactionId: transaction.id, status: PaymentStatus.PENDING };
-      
+      return {
+        transactionId: transaction.id,
+        status: PaymentStatus.PENDING,
+        paymentIntent: paymentResult.providerReference,
+        clientSecret: paymentResult.clientSecret,
+        amount: paymentDto.amount,
+        currency: paymentDto.currency,
+      };
     } catch (error) {
       this.logger.error(
         `Payment creation failed: ${error.message}`,
@@ -91,14 +111,18 @@ export class TransactionService {
       throw new PaymentProcessingException(error.message);
     }
   }
-  
+
   @MessagePattern('payments.processed')
   async handlePaymentProcessed(data: Record<string, unknown>) {
-    await this.transactionRepository.updateTransaction(data.transactionId as string, {
-      status: data.status as PaymentStatus,
-      processedAt: new Date()
-    });
+    await this.transactionRepository.updateTransaction(
+      data.transactionId as string,
+      {
+        status: data.status as PaymentStatus,
+        processedAt: new Date(),
+      }
+    );
   }
+
   async getPaymentStatus(transactionId: string) {
     const transaction = await this.transactionRepository.findById(
       transactionId
@@ -106,7 +130,15 @@ export class TransactionService {
     if (!transaction) {
       throw new PaymentProcessingException('Transaction not found');
     }
-    return transaction;
+    return {
+      status: transaction.status,
+      providerReference: transaction.providerReference,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      metadata: transaction.metadata,
+      processedAt: transaction.processedAt,
+      lastUpdated: transaction.updatedAt,
+    };
   }
 
   async refundPayment(transactionId: string, amount?: number) {
@@ -243,18 +275,15 @@ export class TransactionService {
     return {
       totalTransactions: stats.totalTransactions,
       totalVolume: stats.totalVolume,
-      successRate:
-        ((stats.byStatus?.SUCCESSFUL || 0) / stats.totalTransactions) * 100,
+      successRate: ((stats.byStatus?.SUCCEEDED || 0) / stats.totalTransactions) * 100,
       averageTransactionValue: stats.totalVolume / stats.totalTransactions,
       byProvider: stats.byProvider,
       byStatus: stats.byStatus,
       hourlyDistribution: stats.hourlyDistribution,
     };
   }
-  async createDispute(
-    transactionId: string,
-    disputeDto: CreateDisputeDto
-  ): Promise<DisputeResult> {
+
+  async createDispute(transactionId: string, disputeDto: CreateDisputeDto): Promise<DisputeResult> {
     const transaction = await this.transactionRepository.findById(
       transactionId
     );
@@ -286,10 +315,7 @@ export class TransactionService {
     return disputeResult as DisputeResult;
   }
 
-  async getExchangeRates(
-    fromCurrency: string,
-    toCurrency: string
-  ): Promise<ExchangeRate> {
+  async getExchangeRates(fromCurrency: string, toCurrency: string): Promise<ExchangeRate> {
     const cacheKey = `exchange_rate:${fromCurrency}:${toCurrency}`;
     const cachedRate = await this.redisService.cacheGet<ExchangeRate>(cacheKey);
 
@@ -368,11 +394,6 @@ export class TransactionService {
         min: 1,
         max: 999999,
         currency: 'USD',
-      },
-      [PaymentProvider.ALIPAY]: {
-        min: 0.01,
-        max: 100000,
-        currency: 'CNY',
       },
       [PaymentProvider.MOMO]: {
         min: 100,

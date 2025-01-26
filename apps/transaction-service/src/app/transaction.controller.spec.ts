@@ -46,7 +46,7 @@ describe('TransactionController', () => {
     it('should create a payment and return payment details', async () => {
       const paymentDto: PaymentDto = {
         amount: 100,
-        paymentMethod: PaymentProvider.ALIPAY, 
+        paymentMethod: PaymentProvider.STRIPE, 
         currency: StripeCurrency.USD,
         description: 'A test payment',
         biometricToken: 'dummy-token',

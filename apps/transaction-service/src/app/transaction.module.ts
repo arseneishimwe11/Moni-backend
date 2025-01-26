@@ -12,6 +12,7 @@ import { PaymentProviderFactory } from './providers/payment-provider.factory';
 import { ExchangeRateProvider } from './providers/exchange-rate.provider';
 import { StripeProvider } from './providers/implementations/stripe.provider';
 import { MomoProvider } from './providers/implementations/momo.provider';
+import { PaymentProcessor } from './queue/payment.processor';
 import configs from 'config/config';
 
 @Module({
@@ -28,11 +29,11 @@ import configs from 'config/config';
         type: 'postgres',
         url: configService.get('DB_URL'),
         entities: [Transaction],
-        synchronize: false,
+        synchronize: true,
         ssl: {
           rejectUnauthorized: false
         },
-        logging: true,
+        // logging: true,
       }),
       inject: [ConfigService],
     }),
@@ -63,6 +64,7 @@ import configs from 'config/config';
     },
     StripeProvider,
     MomoProvider,
+    PaymentProcessor,
   ],
   exports: [TransactionService],
 })

@@ -7,6 +7,7 @@ import { PaymentProvider, PaymentRegion } from '../dto/payment.dto';
 import { PaymentProviderNotFoundException } from '../exceptions/payment-provider-not-found.exception';
 import { RedisService } from '@moni-backend/redis';
 import { PaymentProcessingException } from '../exceptions/payment-processing.exception';
+import { TransactionRepository } from '../repositories/transaction.repository';
 
 @Injectable()
 export class PaymentProviderFactory implements OnModuleInit {
@@ -15,7 +16,8 @@ export class PaymentProviderFactory implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly transactionRepository: TransactionRepository
   ) {
     this.providers = new Map<PaymentProvider, IPaymentProvider>();
   }
@@ -26,11 +28,16 @@ export class PaymentProviderFactory implements OnModuleInit {
 
   private initializeProviders() {
     this.providers.set(
-      PaymentProvider.STRIPE, 
-      new StripeProvider(this.configService, this.redisService)
+      PaymentProvider.STRIPE,
+      new StripeProvider(
+        this.configService,
+        this.redisService,
+        this.transactionRepository
+      )
     );
+    
     this.providers.set(
-      PaymentProvider.MOMO, 
+      PaymentProvider.MOMO,
       new MomoProvider(this.configService, this.redisService)
     );
 
@@ -39,7 +46,7 @@ export class PaymentProviderFactory implements OnModuleInit {
 
   getProvider(providerName: PaymentProvider): IPaymentProvider {
     const provider = this.providers.get(providerName);
-    
+
     if (!provider) {
       this.logger.error(`Payment provider ${providerName} not found`);
       throw new PaymentProviderNotFoundException(providerName);
@@ -62,27 +69,32 @@ export class PaymentProviderFactory implements OnModuleInit {
   async isProviderAvailable(provider: PaymentProvider): Promise<boolean> {
     const cacheKey = `provider:available:${provider}`;
     const cached = await this.redisService.cacheGet<boolean>(cacheKey);
-    
+
     if (cached !== null) {
       return cached;
     }
 
     const isAvailable = this.providers.has(provider);
     await this.redisService.cacheSet(cacheKey, isAvailable, 300);
-    
+
     return isAvailable;
   }
 
-  async verifyPayment(provider: PaymentProvider, verificationData: unknown): Promise<PaymentResult> {
+  async verifyPayment(provider: PaymentProvider,verificationData: unknown): Promise<PaymentResult> {
     const paymentProvider = this.getProvider(provider);
-    
+
     try {
-      const verificationResult = await paymentProvider.verifyPayment(verificationData);
+      const verificationResult = await paymentProvider.verifyPayment(
+        verificationData
+      );
       return verificationResult;
     } catch (error) {
-      this.logger.error(`Payment verification failed for provider ${provider}: ${error.message}`);
-      throw new PaymentProcessingException(`Verification failed: ${error.message}`);
+      this.logger.error(
+        `Payment verification failed for provider ${provider}: ${error.message}`
+      );
+      throw new PaymentProcessingException(
+        `Verification failed: ${error.message}`
+      );
     }
   }
-    
 }

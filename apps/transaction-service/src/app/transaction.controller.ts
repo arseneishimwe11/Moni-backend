@@ -23,6 +23,23 @@ export class TransactionController {
     return this.transactionService.verifyPayment(verifyDto);
   }
 
+  @Get('status/:transactionId')
+  @UseGuards(PaymentAuthGuard)
+  async getTransactionStatus(@Param('transactionId') transactionId: string) {
+    const transaction = await this.transactionService.getPaymentStatus(
+      transactionId
+    );
+    return {
+      transactionId: transactionId,
+      status: transaction.status,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      providerReference: transaction.providerReference,
+      metadata: transaction.metadata,
+      processedAt: transaction.processedAt,
+    };
+  }
+
   @Get('payment-methods')
   @UseGuards(PaymentAuthGuard)
   async getAvailablePaymentMethods(@Query('region') region: string) {

@@ -85,6 +85,7 @@ export class MomoProvider implements IPaymentProvider {
           region: paymentData.region,
         },
         processingTime: Date.now(),
+        clientSecret: '',
       };
     } catch (error) {
       this.logger.error(`MoMo payment processing failed: ${error.message}`);
@@ -191,6 +192,7 @@ export class MomoProvider implements IPaymentProvider {
           provider: 'momo',
         },
         processingTime: Date.now(),
+        clientSecret: '',
       };
     } catch (error) {
       this.logger.error(`MoMo payment verification failed: ${error.message}`);
@@ -260,7 +262,7 @@ export class MomoProvider implements IPaymentProvider {
 
   private mapMomoStatus(status: string): PaymentStatus {
     const statusMap: Record<string, PaymentStatus> = {
-      SUCCESSFUL: PaymentStatus.SUCCEEDED,
+      SUCCEEDED: PaymentStatus.SUCCEEDED,
       PENDING: PaymentStatus.PENDING,
       FAILED: PaymentStatus.FAILED,
       CANCELLED: PaymentStatus.CANCELED,

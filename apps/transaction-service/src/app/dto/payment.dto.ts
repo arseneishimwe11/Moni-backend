@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsString, IsOptional, IsEnum, Min, IsUUID, IsObject, Matches, IsUrl } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsOptional, IsEnum, Min, IsUUID, IsObject, Matches, IsUrl, IsArray } from 'class-validator';
 
 export enum PaymentStatus {
   PENDING = 'pending',
@@ -12,16 +12,11 @@ export enum PaymentStatus {
   REQUIRES_ACTION = 'requires_action',
   DISPUTED = 'disputed',
   UNKNOWN = 'unknown',
-  SUCCESSFUL = "SUCCESSFUL",
 }
 
 export enum PaymentProvider {
   STRIPE = 'stripe',
-  ALIPAY = 'alipay',
-  MASTERCARD = 'mastercard',
-  VISA = 'visa',
   MOMO = 'momo',
-  UPI = 'upi'
 }
 
 export enum PaymentRegion {
@@ -54,7 +49,6 @@ export enum RefundStatus {
   UNKNOWN = 'unknown'
 }
 
-
 export class PaymentDto {
   @IsUUID()
   @IsNotEmpty()
@@ -65,7 +59,7 @@ export class PaymentDto {
   @IsNotEmpty()
   amount: number;
 
-  @Transform(({ value }) => value.toUpperCase())
+  @Transform(({ value }) => StripeCurrency[value.toUpperCase()])
   @IsEnum(StripeCurrency)
   @IsNotEmpty()
   currency: StripeCurrency;
@@ -83,6 +77,11 @@ export class PaymentDto {
   @Matches(/^[A-Za-z0-9-_]+$/)
   biometricToken: string;
 
+  @IsOptional()
+  @IsString()
+  @IsString({ each: true })
+  payment_method_types?: string[];
+  
   @IsString()
   @IsOptional()
   description?: string;

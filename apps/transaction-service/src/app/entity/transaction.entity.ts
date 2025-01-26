@@ -43,7 +43,7 @@ export class Transaction {
   @Column({ nullable: true })
   providerReference?: string;
 
-  @Column({ nullable: true })
+  @Column({ default: 'Processed - No error' })
   errorDetails?: string;
 
   @Column({ type: 'jsonb', nullable: true })

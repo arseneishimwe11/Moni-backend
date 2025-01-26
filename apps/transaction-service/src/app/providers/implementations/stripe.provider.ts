@@ -4,8 +4,9 @@ import Stripe from 'stripe';
 import { IPaymentProvider, PaymentResult, RefundResult } from '../interfaces/payment-provider.interface';
 import { PaymentDto, StripeCurrency, PaymentStatus, RefundStatus } from '../../dto/payment.dto';
 import { PaymentProcessingException } from '../../exceptions/payment-processing.exception';
-import { RedisService } from '@moni-backend/redis';
 import { CreateDisputeDto, DisputeReason, DisputeResult, DisputeStatus } from '../../dto/create-dispute.dto';
+import { TransactionRepository } from '../../repositories/transaction.repository';
+import { RedisService } from '@moni-backend/redis';
 
 @Injectable()
 export class StripeProvider implements IPaymentProvider {
@@ -14,11 +15,12 @@ export class StripeProvider implements IPaymentProvider {
 
   readonly name = 'stripe';
   readonly supportedCurrencies = Object.values(StripeCurrency);
-  readonly supportedRegions = ['US', 'EU', 'GB', 'SG', 'AO', 'CG', 'IN'];
+  readonly supportedRegions = ['US', 'EU', 'GB', 'SG', 'AO', 'CG', 'IN','CN'];
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly transactionRepository: TransactionRepository
   ) {
     this.stripe = new Stripe(
       this.configService.get<string>('STRIPE_SECRET_KEY'),
@@ -51,10 +53,7 @@ export class StripeProvider implements IPaymentProvider {
 
       const paymentIntent = await this.stripe.paymentIntents.create(
         {
-          amount: this.convertToSmallestUnit(
-            paymentData.amount,
-            paymentData.currency
-          ),
+          amount: this.convertToSmallestUnit(paymentData.amount, paymentData.currency),
           currency: paymentData.currency.toLowerCase(),
           payment_method_types: this.getPaymentMethodTypes(paymentData.region),
           metadata: {
@@ -63,12 +62,7 @@ export class StripeProvider implements IPaymentProvider {
             biometricVerified: paymentData.biometricToken ? 'true' : 'false',
           },
           description: paymentData.description,
-          statement_descriptor: 'MONI PAYMENT',
-          confirm: true,
-          automatic_payment_methods: {
-            enabled: true,
-            allow_redirects: 'always',
-          },
+          confirm: false,
           receipt_email: paymentData.receiptEmail,
         },
         {
@@ -83,6 +77,7 @@ export class StripeProvider implements IPaymentProvider {
           paymentIntent.amount,
           paymentData.currency
         ),
+        clientSecret: paymentIntent.client_secret,
         currency: paymentIntent.currency,
         metadata: {
           ...paymentIntent.metadata,
@@ -162,12 +157,17 @@ export class StripeProvider implements IPaymentProvider {
     }
   }
 
-  private getPaymentMethodTypes(region: string): string[] {
+  private getPaymentMethodTypes(region: string, specifiedTypes?: string[]): string[] {
+    if (specifiedTypes && specifiedTypes.length > 0) {
+      return specifiedTypes;
+    }
     const baseTypes = ['card'];
 
     switch (region) {
       case 'IN':
-        return [...baseTypes, 'upi'];
+        return [...baseTypes];
+      case 'CN':
+        return [...baseTypes, 'alipay'];
       case 'AO':
       case 'CG':
         return [...baseTypes, 'mobile_money'];
@@ -214,12 +214,19 @@ export class StripeProvider implements IPaymentProvider {
         verificationData as string
       );
 
+      if (stripeVerification.status === 'succeeded') {
+        await this.transactionRepository.updateTransaction(stripeVerification.metadata.transactionId, {
+          status: PaymentStatus.SUCCEEDED
+        });
+      }
+      
       return {
         providerReference: stripeVerification.id,
         status: this.mapStripeStatus(stripeVerification.status),
-        amount: stripeVerification.amount / 100, // Convert from cents
+        amount: this.convertFromSmallestUnit(stripeVerification.amount, stripeVerification.currency),
         currency: stripeVerification.currency.toUpperCase(),
         metadata: stripeVerification.metadata,
+        clientSecret: stripeVerification.client_secret,
         processingTime: Date.now() - stripeVerification.created * 1000,
       };
     } catch (error) {
